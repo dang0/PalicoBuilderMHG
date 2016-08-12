@@ -33,11 +33,13 @@ import scala.swing.Button
 import scala.swing.ProgressBar
 import java.awt.Insets
 import scala.collection.mutable.ListBuffer
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag,typeOf}
 import palico.PBListItem
 import palico.PBListItem
 import scala.swing.event.ListChanged
 import java.awt.Font
+import scala.swing.Dialog
+import scala.swing.event.WindowActivated
 
 object PBmain extends MainFrame with App {
   title = Ref.MAIN_TITLE
@@ -48,6 +50,11 @@ object PBmain extends MainFrame with App {
   menuBar = PBMenuBar
   contents = PBLayout
   centerOnScreen
+  listenTo(Picker)
+  reactions += {
+    case e: WindowActivated => visible = true
+  }
+  
   open
 }
 
@@ -140,7 +147,12 @@ object PBMoveBox extends GridPanel(1,2) {
   contents += (skillBox)
 }
 
-class PBListViewButton(s: String) extends Button(s) {
+class PBListViewButton[T](s: String)(implicit parent: TypeTag[T]) extends Button(s) {
+  parent match {
+    case _ if typeOf[T] == typeOf[SupportMoves] => name = "moves"
+    case _ if typeOf[T] == typeOf[Skills] => name = "skills"
+    case _ =>
+  }
   border = Swing.CompoundBorder(Swing.EmptyBorder(1), border)
   maximumSize = new Dimension(30, size.height)
   minimumSize = maximumSize
@@ -187,7 +199,7 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
   var minusButton = new PBListViewButton("-") { tooltip = "Remove selected" }
   var buttons = new GridPanel(2,1) { border = Swing.EmptyBorder(1) }
   buttons.contents += (plusButton, minusButton)
-  var progressBar = new PBProgressBar(palico.Cat.getMaxCost[T], palico.Cat.availablePoints[T] ) { }
+  var progressBar = new PBProgressBar(palico.Cat.getMaxCost[T], palico.Cat.availablePoints[T] )
   var rightPanel = new BoxPanel(Orientation.Vertical)
   rightPanel.contents += (buttons, progressBar)
   rightPanel.border = Swing.MatteBorder(1, 0, 1, 1, Color.GRAY)
@@ -197,11 +209,15 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
   learnedBox.contents += new Label("learned thing here")
   add(learnedBox, BorderPanel.Position.South)
   
-  listenTo(plusButton,minusButton)
+  listenTo(minusButton)
   reactions += {
     case e: ButtonClicked if(e.source == minusButton) =>
       if(listView.selection.items.nonEmpty) listView.selection.items.foreach { l -= _ }
-      listView.listData = l
+      listView.listData = l 
+      listView.publish(ListChanged[T](listView))
+    case e: ButtonClicked if(e.source == Picker.addButton) =>
+      l += Picker.listview.selection.items.head.asInstanceOf[T]
+      listView.listData = l 
       listView.publish(ListChanged[T](listView))
   }
 }
@@ -213,89 +229,60 @@ object PBListsBox extends GridPanel(1,2) {
 }
 
 object PBMainContents extends BoxPanel(Orientation.Vertical) {
-  
-  val supportButtons = new swing.BoxPanel(swing.Orientation.Vertical) {
-    val buttonPlus = new swing.Button("+") {
-      name = "support"
-      margin = new java.awt.Insets(0, 0, 0, 0); minimumSize = new Dimension(20, 20); maximumSize = minimumSize; focusable = false
-      listenTo(this)
-      reactions += {
-        case e: ButtonClicked => //println("new window")
-         listenTo(new Picker(name))
-      }
-    }
-    
-    val buttonMinus = new swing.Button("-") { margin = new java.awt.Insets(0,0,0,0); minimumSize = new Dimension(20,20); maximumSize = minimumSize; focusable = false }
-    contents += (buttonPlus, buttonMinus)
-  }
-  val supportMoveListView = new swing.ListView[palico.SupportMoves]() { 
-    listData = palico.Cat.moveListBuffer
-    border = Swing.CompoundBorder(Swing.BeveledBorder(Swing.Raised), Swing.BeveledBorder(Swing.Lowered))
-    listenTo(supportButtons.buttonMinus)
-    reactions += {
-      case e: ButtonClicked if(selection.items.nonEmpty) => //println(e)
-        selection.items.foreach { palico.Cat.moveListBuffer -= _ }
-        listData = palico.Cat.moveListBuffer
-    }
-  }
-  val supportMoveContainer = new swing.BorderPanel() {
-    add(supportMoveListView, swing.BorderPanel.Position.Center)
-    add(supportButtons, swing.BorderPanel.Position.East)
-    //border = Swing.LineBorder(Color.GRAY)
-  }
-  
-  
-  val skillsButtons = new swing.BoxPanel(swing.Orientation.Vertical) {
-    val buttonPlus = new swing.Button("+") { margin = new java.awt.Insets(0,0,0,0); minimumSize = new Dimension(20,20); maximumSize = minimumSize; focusable = false }
-    val buttonMinus = new swing.Button("-") { margin = new java.awt.Insets(0,0,0,0); minimumSize = new Dimension(20,20); maximumSize = minimumSize; focusable = false }
-    contents += (buttonPlus, buttonMinus)
-  }
-  val skillsListView = new swing.ListView[palico.Skills]() { 
-    listData = palico.Cat.skillListBuffer 
-    border = Swing.CompoundBorder(Swing.BeveledBorder(Swing.Raised), Swing.BeveledBorder(Swing.Lowered))
-  }
-  val skillsContainer = new swing.BorderPanel() {
-    add(new ScrollPane(skillsListView), swing.BorderPanel.Position.Center)
-    add(new ScrollPane(skillsButtons), swing.BorderPanel.Position.East)
-    //border = Swing.LineBorder(Color.GRAY)
-  }
-  
   contents += (
       PBMoveBox,
       PBListsBox)
    border = Swing.EmptyBorder(5)
-   
-   
 }
 
-class Picker(val t: String) extends swing.Dialog {
+object Picker extends Dialog {
+  title = ""
   modal = true
-  title = "Select " + t
-  contents = new swing.BorderPanel {
-    border = Swing.EmptyBorder(5)
-    val listview = 
-     // if(t == "support")
-        new swing.ListView[SupportMoves](palico.SupportMoves.allMoves)
-      //else new swing.ListView[Skills]()
-    
-    add(new swing.ScrollPane(listview), swing.BorderPanel.Position.Center)
-    
+  resizable = false
+  setLocationRelativeTo(PBMainContents)
+  var listview: ListView[_] = null
+  val scrollPane = new ScrollPane
+  val addButton = new Button(Action("Add"){close})
+  contents = new BorderPanel {
+    border = Swing.EmptyBorder(5)    
+    add(scrollPane, BorderPanel.Position.Center)    
     val buttons = new GridPanel(1,2) {
-      contents += (new swing.Button("OK!") {name = "ok"}, new swing.Button("Cancel!") {name = "cancel"})
+      contents += (addButton, new Button(Action("Cancel"){close}) )
       hGap = 5
       vGap = 5
     }
-    add(buttons, swing.BorderPanel.Position.South)
-    listenTo(buttons.contents.head, buttons.contents.last)
-    reactions += {
-      case e: ButtonClicked if(e.source.name == "ok") => //println(e)
-        palico.Cat.moveListBuffer += listview.selection.items.head
-        close
-      case e: ButtonClicked if(e.source.name == "cancel") => close
-    }
+    add(buttons, BorderPanel.Position.South)
   }
   
+  def supportList = palico.Cat.getDescendants[SupportMoves].toList
+  def skillsList = palico.Cat.getDescendants[Skills].toList
+  listenTo(PBListsBox.moveView.plusButton, PBListsBox.skillView.plusButton)
+  reactions += {
+    case e: ButtonClicked if(e.source == PBListsBox.moveView.plusButton) => 
+      PBListsBox.moveView.listenTo(addButton)
+      populateList(palico.Cat.getDescendants[SupportMoves].toList)
+      PBListsBox.moveView.deafTo(addButton)
+    case e: ButtonClicked if(e.source == PBListsBox.skillView.plusButton) =>
+      PBListsBox.skillView.listenTo(addButton)
+      populateList(palico.Cat.getDescendants[Skills].toList)
+      PBListsBox.skillView.deafTo(addButton)
+  }
   
-  open
+  def populateList(l: => List[PBListItem]) {
+    l.inits //instantiate objects, populate list
+    val list = l.sortBy(_.toString).sortWith(_.cost > _.cost)
+    val listcost = list.map(_.asInstanceOf[PBListItem].cost)
+    scrollPane.rowHeaderView = new ListView(listcost.toList) {
+      enabled = false
+    }
+    listview = new ListView(list) {
+      selection.intervalMode = ListView.IntervalMode.Single
+      selectIndices(0)
+    }
+    scrollPane.viewportView = listview
+    pack
+    setLocationRelativeTo(PBMainContents)
+    open
+  }
 }
 
