@@ -50,11 +50,11 @@ object PBmain extends MainFrame with App {
   menuBar = PBMenuBar
   contents = PBLayout
   centerOnScreen
+  Picker
   listenTo(Picker)
   reactions += {
     case e: WindowActivated => visible = true
   }
-  
   open
 }
 
@@ -154,7 +154,7 @@ class PBListViewButton[T](s: String)(implicit parent: TypeTag[T]) extends Button
     case _ =>
   }
   border = Swing.CompoundBorder(Swing.EmptyBorder(1), border)
-  maximumSize = new Dimension(30, size.height)
+  //maximumSize = new Dimension(30, 30)
   minimumSize = maximumSize
   margin = new Insets(0,0,0,0)
   focusable = false
@@ -206,18 +206,28 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
   add(rightPanel, BorderPanel.Position.East)
   
   var learnedBox = new BoxPanel(Orientation.Horizontal) { border = Swing.LineBorder(Color.BLACK) }
-  learnedBox.contents += new Label("learned thing here")
+  var learnButton = new PBListViewButton("x") { tooltip = "Learn something" }
+  var learnLabel = new Label("learned thing here")
+  learnedBox.contents += (learnButton, learnLabel)
   add(learnedBox, BorderPanel.Position.South)
   
-  listenTo(minusButton)
+  listenTo(minusButton, palico.Cat)
   reactions += {
     case e: ButtonClicked if(e.source == minusButton) =>
       if(listView.selection.items.nonEmpty) listView.selection.items.foreach { l -= _ }
-      listView.listData = l 
+      listView.listData = l.sortWith(_.cost > _.cost)
       listView.publish(ListChanged[T](listView))
+    case e: ButtonClicked if(e.source == Picker.addButton && Picker.addButton.tooltip == "learn" ) =>
+      palico.Cat.setLearned[T](Picker.listview.selection.items.head.asInstanceOf[T])
+      learnLabel.text = palico.Cat.getLearned[T].toString
     case e: ButtonClicked if(e.source == Picker.addButton) =>
       l += Picker.listview.selection.items.head.asInstanceOf[T]
-      listView.listData = l 
+      listView.listData = l.sortWith(_.cost > _.cost)
+      listView.publish(ListChanged[T](listView))
+    case e: SelectionChanged if(e.source == PBClassBox.classCb)=>
+      while(palico.Cat.availablePoints[T] < 0)
+        l -= l.sortWith(_.cost > _.cost).last
+      listView.listData = l.sortWith(_.cost > _.cost)
       listView.publish(ListChanged[T](listView))
   }
 }
@@ -256,15 +266,18 @@ object Picker extends Dialog {
   
   def supportList = palico.Cat.getDescendants[SupportMoves].toList
   def skillsList = palico.Cat.getDescendants[Skills].toList
-  listenTo(PBListsBox.moveView.plusButton, PBListsBox.skillView.plusButton)
+  listenTo(PBListsBox.moveView.plusButton, PBListsBox.skillView.plusButton,
+      PBListsBox.moveView.learnButton, PBListsBox.skillView.learnButton)
   reactions += {
-    case e: ButtonClicked if(e.source == PBListsBox.moveView.plusButton) => 
+    case e: ButtonClicked if(e.source == PBListsBox.moveView.learnButton || e.source == PBListsBox.moveView.plusButton && palico.Cat.availablePoints[SupportMoves] > 0) => 
+      addButton.tooltip = if(e.source == PBListsBox.moveView.learnButton) "learn" else "add"
       PBListsBox.moveView.listenTo(addButton)
-      populateList(palico.Cat.getDescendants[SupportMoves].toList)
+      populateList(palico.Cat.getAvailable[SupportMoves](e.source == PBListsBox.moveView.learnButton))
       PBListsBox.moveView.deafTo(addButton)
-    case e: ButtonClicked if(e.source == PBListsBox.skillView.plusButton) =>
+    case e: ButtonClicked if(e.source == PBListsBox.skillView.learnButton || e.source == PBListsBox.skillView.plusButton && palico.Cat.availablePoints[Skills] > 0) =>
+      addButton.tooltip = if(e.source == PBListsBox.skillView.learnButton) "learn" else "add"
       PBListsBox.skillView.listenTo(addButton)
-      populateList(palico.Cat.getDescendants[Skills].toList)
+      populateList(palico.Cat.getAvailable[Skills](e.source == PBListsBox.skillView.learnButton))
       PBListsBox.skillView.deafTo(addButton)
   }
   
