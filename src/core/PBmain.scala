@@ -2,44 +2,37 @@
 
 package core
 
-import scala.swing.MainFrame
-import scala.swing.MenuBar
-import scala.swing.Menu
-import scala.swing.MenuItem
-import scala.swing.Separator
-import scala.swing.GridPanel
-import scala.swing.Label
-import scala.swing.event.SelectionChanged
-import scala.swing.ComboBox
-import scala.swing.Swing
-import java.awt.Color
-import palico.Rath_of_Meow
-import scala.swing.BoxPanel
-import java.awt.Dimension
 import scala.swing.event.ButtonClicked
-import java.awt.Point
+import scala.swing.event.SelectionChanged
+import scala.swing.Swing
 import palico.SupportMoves
-import palico.Skills
-import scala.swing.ScrollPane
-import scala.swing.event.WindowDeactivated
-import scala.swing.Action
-import scala.swing.Orientation
-import scala.swing.FlowPanel
-import javax.swing.ImageIcon
-import scala.swing.BorderPanel
-import scala.swing.Alignment
-import scala.swing.ListView
-import scala.swing.Button
-import scala.swing.ProgressBar
-import java.awt.Insets
-import scala.collection.mutable.ListBuffer
-import scala.reflect.runtime.universe.{TypeTag,typeOf}
-import palico.PBListItem
-import palico.PBListItem
+import scala.swing.MainFrame
 import scala.swing.event.ListChanged
-import java.awt.Font
-import scala.swing.Dialog
+import scala.swing.FlowPanel
+import scala.swing.BorderPanel
+import scala.swing.Orientation
+import palico.Skills
+import scala.swing.BoxPanel
 import scala.swing.event.WindowActivated
+import palico.PBListItem
+import scala.swing.ProgressBar
+import scala.collection.mutable.ListBuffer
+import javax.swing.ImageIcon
+import scala.swing.GridPanel
+import scala.swing.ListView
+import scala.swing.Dialog
+import scala.swing.MenuItem
+import scala.swing.Menu
+import scala.swing.Button
+import scala.swing.Label
+import scala.swing.ScrollPane
+import scala.swing.MenuBar
+import scala.swing.Action
+import java.awt.Insets
+import java.awt.Dimension
+import java.awt.Color
+import scala.reflect.runtime.universe.{TypeTag, typeOf}
+import java.awt.Font
 
 object PBmain extends MainFrame with App {
   title = Ref.MAIN_TITLE
@@ -62,10 +55,21 @@ object PBMenuBar extends MenuBar {
   contents += (
     new Menu("File") {
       contents += (
-        new MenuItem(Action("Open") { println("open") }),
-        new MenuItem(Action("Save") { println("save") }),
-        new Separator,
-        new MenuItem(Action("Quit") { System.exit(0) }))
+//        new MenuItem(Action("Open") { println("open") }),
+//        new MenuItem(Action("Save") { println("save") }),
+//        new Separator,
+        new MenuItem(Action("Quit") { PBmain.close }))
+    },
+    new Menu("Help") {
+      contents += (
+        new MenuItem(Action("About") {
+          Dialog.showMessage(
+              PBListsBox, 
+              "Credits to Arkaether \n\nAll information gathered from \nhttps://redd.it/4tfy86", 
+              "About", 
+              Dialog.Message.Info, 
+              Swing.EmptyIcon)
+        }))
     })
 }
 
@@ -77,10 +81,11 @@ object PBLayout extends BorderPanel {
 }
 
 object PBStatusBar extends swing.GridPanel(1,4) {
-  def bhernaVal = new Label(100 + "%")
-  def kokotoVal = new Label(100 + "%")
-  def pokkeVal = new Label(100 + "%")
-  def yukumoVal = new Label(100 + "%")
+  val bhernaVal = new Label(100.0 + "%")
+  val kokotoVal = new Label(100.0 + "%")
+  val pokkeVal = new Label(100.0 + "%")
+  val yukumoVal = new Label(100.0 + "%")
+  update
   
   var bhernaLbl = new FlowPanel { contents += (new Label("Bherna: "), bhernaVal) }
   var kokotoLbl = new FlowPanel { contents += (new Label("Kokoto: "), kokotoVal) }
@@ -88,12 +93,40 @@ object PBStatusBar extends swing.GridPanel(1,4) {
   var yukumoLbl = new FlowPanel { contents += (new Label("Yukumo: "), yukumoVal) }
   
   contents += (bhernaLbl, kokotoLbl, pokkeLbl, yukumoLbl)
-  
+  listenTo(PBListsBox.moveView.listView, PBListsBox.skillView.listView)
+  reactions += {
+    case e: ListChanged[_] => update
+  }
   def update() {
-    bhernaVal.text = 90 + "%"
-    kokotoVal.text = 90 + "%"
-    pokkeVal.text = 90 + "%"
-    yukumoVal.text = 90 + "%"
+    var bherna, kokoto, pokke, yukumo = 1.0
+    palico.Cat.moveListBuffer.foreach { x =>
+      bherna *= x.bhernaRate
+      kokoto *= x.kokotoRate
+      pokke *= x.pokkeRate
+      yukumo *= x.yukumoRate
+    }
+    palico.Cat.skillListBuffer.foreach { x =>
+      bherna *= x.bhernaRate
+      kokoto *= x.kokotoRate
+      pokke *= x.pokkeRate
+      yukumo *= x.yukumoRate
+    }
+    bhernaVal.text = "%.9f".format(bherna * 100).toFloat.toString
+    kokotoVal.text = "%.9f".format(kokoto * 100).toFloat.toString
+    pokkeVal.text = "%.9f".format(pokke * 100).toFloat.toString
+    yukumoVal.text = "%.9f".format(yukumo * 100).toFloat.toString
+    val max = List(bherna,kokoto,pokke,yukumo).map(d => "%.9f".format(d * 100).toFloat).max
+    List(bhernaVal,kokotoVal,pokkeVal,yukumoVal).foreach { lbl =>
+      if(max != 100.0 && lbl.text.toFloat == max) {
+        lbl.font = new Font(lbl.font.getFamily, Font.BOLD, lbl.font.getSize)
+        lbl.border = Swing.MatteBorder(0, 0, 1, 0, Color.RED)
+      }
+      else {
+        lbl.font = new Font(lbl.font.getFamily, Font.PLAIN, lbl.font.getSize)
+        lbl.border = Swing.EmptyBorder(0, 0, 1, 0)
+      }
+      lbl.text += "%"
+    }
   }
 }
 
@@ -207,7 +240,7 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
   
   var learnedBox = new BoxPanel(Orientation.Horizontal) { border = Swing.LineBorder(Color.BLACK) }
   var learnButton = new PBListViewButton("x") { tooltip = "Learn something" }
-  var learnLabel = new Label("learned thing here")
+  var learnLabel = new Label("learn something")
   learnedBox.contents += (learnButton, learnLabel)
   add(learnedBox, BorderPanel.Position.South)
   
@@ -225,6 +258,8 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
       listView.listData = l.sortWith(_.cost > _.cost)
       listView.publish(ListChanged[T](listView))
     case e: SelectionChanged if(e.source == PBClassBox.classCb)=>
+      if(palico.Cat.getInnate[T].exists(i => i.isInstanceOf[T] && i.toString == learnLabel.text))
+        learnLabel.text = "learn something"
       while(palico.Cat.availablePoints[T] < 0)
         l -= l.sortWith(_.cost > _.cost).last
       listView.listData = l.sortWith(_.cost > _.cost)

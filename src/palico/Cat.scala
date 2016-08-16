@@ -44,6 +44,12 @@ object Cat extends Publisher {
     case skills if typeOf[T] == typeOf[Skills] => learnedSkill.asInstanceOf[T]
     case _ => throw new Exception("")
   }
+  
+  def getInnate[T <: PBListItem](implicit tag: TypeTag[T]): Set[T] = tag match {
+    case moves if typeOf[T] == typeOf[SupportMoves] => secondaryMoves.map(_.asInstanceOf[T]).toSet
+    case skills if typeOf[T] == typeOf[Skills] => defaultSkills.map(_.asInstanceOf[T]).toSet
+    case _ => throw new Exception("")
+  }
     
   def availablePoints[T <: PBListItem](implicit tag: TypeTag[T]): Int = {
     var total = 0
@@ -80,7 +86,7 @@ object Cat extends Publisher {
           removals = removals ++ getDescendants[MoveGroupA].map(_.asInstanceOf[T])
         if(availablePoints[T] < 2) 
           removals = removals ++ getDescendants[MoveGroupB].map(_.asInstanceOf[T])
-        removals = removals ++ Set(getLearned[T])
+        removals = removals ++ Set(getLearned[T]) ++ getInnate[T]
         removals.inits
         list = list -- removals
         list.toList
@@ -96,6 +102,7 @@ object Cat extends Publisher {
           removals = removals ++ getDescendants[SkillGroupA].map(_.asInstanceOf[T])
         if(availablePoints[T] < 2) 
           removals = removals ++ getDescendants[SkillGroupB].map(_.asInstanceOf[T])
+        removals = removals ++ Set(getLearned[T]) ++ getInnate[T]
         removals.inits
         list = list -- removals
         list.toList
