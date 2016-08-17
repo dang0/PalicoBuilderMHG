@@ -33,6 +33,7 @@ import java.awt.Dimension
 import java.awt.Color
 import scala.reflect.runtime.universe.{TypeTag, typeOf}
 import java.awt.Font
+import java.util.Locale
 
 object PBmain extends MainFrame with App {
   title = Ref.MAIN_TITLE
@@ -111,11 +112,11 @@ object PBStatusBar extends swing.GridPanel(1,4) {
       pokke *= x.pokkeRate
       yukumo *= x.yukumoRate
     }
-    bhernaVal.text = "%.9f".format(bherna * 100).toFloat.toString
-    kokotoVal.text = "%.9f".format(kokoto * 100).toFloat.toString
-    pokkeVal.text = "%.9f".format(pokke * 100).toFloat.toString
-    yukumoVal.text = "%.9f".format(yukumo * 100).toFloat.toString
-    val max = List(bherna,kokoto,pokke,yukumo).map(d => "%.9f".format(d * 100).toFloat).max
+    bhernaVal.text = "%.9f".formatLocal(Locale.US, bherna * 100).toFloat.toString
+    kokotoVal.text = "%.9f".formatLocal(Locale.US, kokoto * 100).toFloat.toString
+    pokkeVal.text = "%.9f".formatLocal(Locale.US, pokke * 100).toFloat.toString
+    yukumoVal.text = "%.9f".formatLocal(Locale.US, yukumo * 100).toFloat.toString
+    val max = List(bherna,kokoto,pokke,yukumo).map(d => "%.9f".formatLocal(Locale.US, d * 100).toFloat).max
     List(bhernaVal,kokotoVal,pokkeVal,yukumoVal).foreach { lbl =>
       if(max != 100.0 && lbl.text.toFloat == max) {
         lbl.font = new Font(lbl.font.getFamily, Font.BOLD, lbl.font.getSize)
