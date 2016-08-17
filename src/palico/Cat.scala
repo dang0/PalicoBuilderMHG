@@ -94,10 +94,9 @@ object Cat extends Publisher {
         if(skillListBuffer.filter(_.isInstanceOf[SkillGroupB]).size == 1
             && skillListBuffer.filter(_.isInstanceOf[SkillGroupC]).size == 4)
           list = getDescendants[MoveGroupB].map(_.asInstanceOf[T])
-        var removals = Set.empty[T]
-        removals = removals ++ skillListBuffer.map(_.asInstanceOf[T]).toSet
+        var removals = skillListBuffer.map(_.asInstanceOf[T]).toSet
         if(!learn) 
-          removals = getDescendants[DefaultSkills].map(_.asInstanceOf[T])
+          removals = removals ++ getDescendants[DefaultSkills].map(_.asInstanceOf[T])
         if(skillListBuffer.exists(_.isInstanceOf[SkillGroupA]) || availablePoints[T] < 3) 
           removals = removals ++ getDescendants[SkillGroupA].map(_.asInstanceOf[T])
         if(availablePoints[T] < 2) 
