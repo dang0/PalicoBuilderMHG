@@ -4,6 +4,9 @@ import scala.collection.mutable.ListBuffer
 import java.awt.Color
 import scala.swing.Publisher
 import scala.reflect.runtime.universe._
+import core.PBListsBox
+import core.PBTableModel
+
 
 object Cat extends Publisher {
   var catClass: CatClass = Charisma
@@ -14,6 +17,7 @@ object Cat extends Publisher {
   val defaultMoveList: List[SupportMoves] =  List(Mini_Barrel_Bombay, Herb_Horn)
   val moveListBuffer: ListBuffer[SupportMoves] = ListBuffer.empty
   val skillListBuffer: ListBuffer[Skills] = ListBuffer.empty
+  def comboListBuffer: ListBuffer[PBListItem] = moveListBuffer ++ skillListBuffer
   var learnedMove: SupportMoves = null
   var learnedSkill: Skills = null
   
@@ -108,6 +112,38 @@ object Cat extends Publisher {
       case _ => List.empty[T]
     }
   }
+
+  def declareMax {
+    var rates = List(1.0, 1.0, 1.0, 1.0)
+    var maxes: ListBuffer[PBListItem] = ListBuffer.empty[PBListItem]
+    var moveMax, skillMax = 0.0
+    moveListBuffer.foreach { x =>
+      rates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ * _)
+    }
+    skillListBuffer.foreach { x =>
+      rates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ * _)
+    }
+    moveListBuffer.foreach { x =>
+      var removedRates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ / _)
+      if (removedRates.max > moveMax) moveMax = removedRates.max
+    }
+    skillListBuffer.foreach { x =>
+      var removedRates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ / _)
+      if (removedRates.max > skillMax) skillMax = removedRates.max
+    }
+    moveListBuffer.foreach { x =>
+      var removedRates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ / _)
+      if (removedRates.max == moveMax) maxes += x
+    }
+    skillListBuffer.foreach { x =>
+      var removedRates = (rates, List(x.bhernaRate, x.kokotoRate, x.pokkeRate, x.yukumoRate)).zipped.map(_ / _)
+      if (removedRates.max == skillMax) maxes += x
+    }
+    comboListBuffer.intersect(maxes).foreach { _.isMax = true }
+    comboListBuffer.diff(maxes).foreach { _.isMax = false }
+    PBListsBox.moveView.table.model.asInstanceOf[PBTableModel[PBListItem]].fireTableDataChanged
+    PBListsBox.skillView.table.model.asInstanceOf[PBTableModel[PBListItem]].fireTableDataChanged
+  }
 }
 
 sealed abstract class CatClass (
@@ -155,11 +191,14 @@ sealed abstract class PBListItem (
   var rates: List[Double] = List(1.0,1.0,1.0,1.0),
   val cost: Int = 0,
   val desc: String = "No description"){
+  var selected: Boolean = true
+  var isMax: Boolean = false
     def bhernaRate = rates(0)
     def kokotoRate = rates(1)
     def pokkeRate = rates(2)
     def yukumoRate = rates(3)
 }
+case object NullItem extends PBListItem
 
 sealed abstract class SupportMoves(list: List[Double] = List(1,1,1,1), cost: Int = 0) extends PBListItem(list, cost) {
   var moveType: String = ""

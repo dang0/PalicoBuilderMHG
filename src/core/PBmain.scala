@@ -16,7 +16,6 @@ import scala.swing.BoxPanel
 import scala.swing.event.WindowActivated
 import palico.PBListItem
 import scala.swing.ProgressBar
-import scala.collection.mutable.ListBuffer
 import javax.swing.ImageIcon
 import scala.swing.GridPanel
 import scala.swing.ListView
@@ -34,10 +33,25 @@ import java.awt.Color
 import scala.reflect.runtime.universe.{TypeTag, typeOf}
 import java.awt.Font
 import java.util.Locale
+import scala.swing.CheckBox
+import scala.swing.Publisher
+import scala.swing.event.MouseClicked
+import javafx.scene.input.MouseButton
+import java.awt.event.MouseEvent
+import scala.swing.event.FocusLost
+import scala.swing.event.MouseMoved
+import scala.swing.event.MouseReleased
+import scala.swing.Table
+import scala.swing.Alignment
+import scala.swing.event.TableChanged
+import javax.swing.table.AbstractTableModel
+import javax.swing.event.TableModelEvent
+import scala.collection.mutable.ListBuffer
 
 object PBmain extends MainFrame with App {
   title = Ref.MAIN_TITLE
   size = Ref.MAIN_SIZE
+  preferredSize = size
   minimumSize = size
   maximumSize = size
   resizable = false
@@ -94,23 +108,28 @@ object PBStatusBar extends swing.GridPanel(1,4) {
   var yukumoLbl = new FlowPanel { contents += (new Label("Yukumo: "), yukumoVal) }
   
   contents += (bhernaLbl, kokotoLbl, pokkeLbl, yukumoLbl)
-  listenTo(PBListsBox.moveView.listView, PBListsBox.skillView.listView)
+//  listenTo(PBListsBox.moveView.listView, PBListsBox.skillView.listView)
+  listenTo(PBListsBox.moveView.table, PBListsBox.skillView.table)
   reactions += {
-    case e: ListChanged[_] => update
+    case e: TableChanged => update
   }
   def update() {
     var bherna, kokoto, pokke, yukumo = 1.0
     palico.Cat.moveListBuffer.foreach { x =>
-      bherna *= x.bhernaRate
-      kokoto *= x.kokotoRate
-      pokke *= x.pokkeRate
-      yukumo *= x.yukumoRate
+      if(x.selected) {
+        bherna *= x.bhernaRate
+        kokoto *= x.kokotoRate
+        pokke *= x.pokkeRate
+        yukumo *= x.yukumoRate
+      }
     }
     palico.Cat.skillListBuffer.foreach { x =>
-      bherna *= x.bhernaRate
-      kokoto *= x.kokotoRate
-      pokke *= x.pokkeRate
-      yukumo *= x.yukumoRate
+      if(x.selected) {
+        bherna *= x.bhernaRate
+        kokoto *= x.kokotoRate
+        pokke *= x.pokkeRate
+        yukumo *= x.yukumoRate
+      }
     }
     bhernaVal.text = "%.9f".formatLocal(Locale.US, bherna * 100).toFloat.toString
     kokotoVal.text = "%.9f".formatLocal(Locale.US, kokoto * 100).toFloat.toString
@@ -150,7 +169,6 @@ object PBClassBox extends BoxPanel(Orientation.Horizontal) {
   }
   
   val iconPanel = new FlowPanel { }
-  
   border = Swing.EmptyBorder(5)
   contents += (classCb, iconPanel)
 }
@@ -188,13 +206,15 @@ class PBListViewButton[T](s: String)(implicit parent: TypeTag[T]) extends Button
     case _ =>
   }
   border = Swing.CompoundBorder(Swing.EmptyBorder(1), border)
-  //maximumSize = new Dimension(30, 30)
-  minimumSize = maximumSize
+  preferredSize = new Dimension(25, 25)
+  maximumSize = preferredSize
+  minimumSize = preferredSize
   margin = new Insets(0,0,0,0)
   focusable = false
 }
 
-class PBProgressBar[T](m: => Int, c: => Int)(implicit parent: ListView[T]) extends ProgressBar {
+//class PBProgressBar[T](m: => Int, c: => Int)(implicit parent: ListView[T]) extends ProgressBar {
+class PBProgressBar[T](m: => Int, c: => Int)(implicit parent: Table) extends ProgressBar {
   val defaultForeground = foreground
   orientation = Orientation.Vertical
   minimumSize = new Dimension(30, size.height)
@@ -205,7 +225,7 @@ class PBProgressBar[T](m: => Int, c: => Int)(implicit parent: ListView[T]) exten
   labelPainted = true
   listenTo(parent)
   reactions += {
-    case e: ListChanged[T] => 
+    case e: TableChanged => 
       value = max - c
       label = setLabel
   }
@@ -223,10 +243,69 @@ class PBProgressBar[T](m: => Int, c: => Int)(implicit parent: ListView[T]) exten
   }
 }
 
+//object PBRender extends ListView.AbstractRenderer[PBListItem,CheckBox](new CheckBox) {
+object PBRender extends Table.AbstractRenderer[PBListItem,Label](new Label) {
+  //val border = component.border
+  var listMax = 0.0
+  override def configure(table: Table, isSelected: Boolean, hasFocus: Boolean, a: PBListItem, row: Int, column: Int) {
+    if(a.isMax) component.border = Swing.CompoundBorder(Swing.MatteBorder(0, 5, 0, 5, Color.GREEN), Swing.EmptyBorder(0,4,0,0))
+    else component.border = Swing.EmptyBorder(0,9,0,5)
+    component.xAlignment = Alignment.Left
+    component.text = a.toString
+  }
+}
+
+class PBTableModel[T <: PBListItem](l: => ListBuffer[T]) extends AbstractTableModel {
+//  def data = Array.tabulate[Any](l.length,2)((x,y) => y match {case 0 => true case _ => l.applyOrElse(x, new String)})
+  def data = l
+  val headers = Array.tabulate(2)(_ match {case 0 => "%" case _ => "Name"})
+  
+  override def getColumnName(column: Int) = headers(column).toString
+  def getRowCount() = data.length
+  def getColumnCount() = headers.length
+  def getValueAt(row: Int, col: Int): AnyRef = col match {
+    case 0 => data(row).asInstanceOf[PBListItem].selected.asInstanceOf[AnyRef]
+    case 1 => data(row).asInstanceOf[PBListItem].asInstanceOf[AnyRef]
+  }
+  override def isCellEditable(row: Int, column: Int) = if(column == 0) true else false
+  override def setValueAt(value: Any, row: Int, col: Int) {
+    l(row).selected = value.asInstanceOf[Boolean]
+    fireTableCellUpdated(row, col)
+    fireTableChanged(new TableModelEvent(this))
+  }
+  override def fireTableDataChanged() {
+    data
+    super.fireTableDataChanged()
+  }
+}
+
 class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T]) extends BorderPanel {
   border = Swing.EmptyBorder(3)
-  implicit var listView = new ListView[T](l)
-  var listPane = new ScrollPane(listView)
+  implicit var table = new Table {
+    model = new PBTableModel(l)
+    rowHeight = 25
+    peer.setDefaultRenderer(classOf[Any], PBRender.peer)
+    peer.getTableHeader.setReorderingAllowed(false)
+    peer.getTableHeader.setResizingAllowed(false)
+    peer.getColumnModel.getColumn(0).setMaxWidth(25)
+  }
+//  implicit var listView = new ListView[T](l) {
+//    fixedCellHeight = 25
+//    renderer = PBRender 
+//    listenTo(mouse.clicks)
+//    reactions += {
+//      case e: MouseReleased if(e.peer.getButton == MouseEvent.BUTTON1 
+//          && e.point.x < 20 && e.point.y < listData.length*fixedCellHeight) =>
+//        val sel = selection.items.head.selected
+//        selection.items.foreach{ _.selected = !sel }
+//        val items = selection.items.map(listData.indexOf(_)) // save selection
+//        publish(ListChanged[T](this)) // force list update
+//        selectIndices(items: _*) // reselect items
+//    }
+//  }
+
+//  var listPane = new ScrollPane(listView)
+  var listPane = new ScrollPane(table)
   add(listPane, BorderPanel.Position.Center)
   
   var plusButton = new PBListViewButton("+") { tooltip = "Add to list" }
@@ -239,32 +318,36 @@ class PBListView[T <: PBListItem](l: => ListBuffer[T])(implicit tag: TypeTag[T])
   rightPanel.border = Swing.MatteBorder(1, 0, 1, 1, Color.GRAY)
   add(rightPanel, BorderPanel.Position.East)
   
-  var learnedBox = new BoxPanel(Orientation.Horizontal) { border = Swing.LineBorder(Color.BLACK) }
-  var learnButton = new PBListViewButton("x") { tooltip = "Learn something" }
-  var learnLabel = new Label("learn something")
-  learnedBox.contents += (learnButton, learnLabel)
-  add(learnedBox, BorderPanel.Position.South)
+//  var learnedBox = new BoxPanel(Orientation.Horizontal) { border = Swing.LineBorder(Color.BLACK) }
+//  var learnButton = new PBListViewButton("x") { tooltip = "Learn something" }
+//  var learnLabel = new Label("learn something")
+//  learnedBox.contents += (learnButton, learnLabel)
+//  add(learnedBox, BorderPanel.Position.South)
   
   listenTo(minusButton, palico.Cat)
   reactions += {
     case e: ButtonClicked if(e.source == minusButton) =>
-      if(listView.selection.items.nonEmpty) listView.selection.items.foreach { l -= _ }
-      listView.listData = l.sortWith(_.cost > _.cost)
-      listView.publish(ListChanged[T](listView))
+//      if(listView.selection.items.nonEmpty) listView.selection.items.foreach { l -= _ }
+//      listView.listData = l.sortWith(_.cost > _.cost)
+//      listView.publish(ListChanged[T](listView))
+      if(table.selection.rows.nonEmpty) table.selection.rows.toList.reverse.foreach { l.remove(_) }
+      palico.Cat.declareMax
     case e: ButtonClicked if(e.source == Picker.addButton && Picker.addButton.tooltip == "learn" ) =>
       palico.Cat.setLearned[T](Picker.listview.selection.items.head.asInstanceOf[T])
-      learnLabel.text = palico.Cat.getLearned[T].toString
+//      learnLabel.text = palico.Cat.getLearned[T].toString
     case e: ButtonClicked if(e.source == Picker.addButton) =>
       l += Picker.listview.selection.items.head.asInstanceOf[T]
-      listView.listData = l.sortWith(_.cost > _.cost)
-      listView.publish(ListChanged[T](listView))
+      palico.Cat.declareMax
+//      listView.listData = l.sortWith(_.cost > _.cost)
+//      listView.publish(ListChanged[T](listView))
     case e: SelectionChanged if(e.source == PBClassBox.classCb)=>
-      if(palico.Cat.getInnate[T].exists(i => i.isInstanceOf[T] && i.toString == learnLabel.text))
-        learnLabel.text = "learn something"
+//      if(palico.Cat.getInnate[T].exists(i => i.isInstanceOf[T] && i.toString == learnLabel.text))
+//        learnLabel.text = "learn something"
       while(palico.Cat.availablePoints[T] < 0)
         l -= l.sortWith(_.cost > _.cost).last
-      listView.listData = l.sortWith(_.cost > _.cost)
-      listView.publish(ListChanged[T](listView))
+        palico.Cat.declareMax
+//      listView.listData = l.sortWith(_.cost > _.cost)
+//      listView.publish(ListChanged[T](listView))
   }
 }
 
@@ -302,18 +385,18 @@ object Picker extends Dialog {
   
   def supportList = palico.Cat.getDescendants[SupportMoves].toList
   def skillsList = palico.Cat.getDescendants[Skills].toList
-  listenTo(PBListsBox.moveView.plusButton, PBListsBox.skillView.plusButton,
-      PBListsBox.moveView.learnButton, PBListsBox.skillView.learnButton)
+  listenTo(PBListsBox.moveView.plusButton, PBListsBox.skillView.plusButton)
+//      PBListsBox.moveView.learnButton, PBListsBox.skillView.learnButton)
   reactions += {
-    case e: ButtonClicked if(e.source == PBListsBox.moveView.learnButton || e.source == PBListsBox.moveView.plusButton && palico.Cat.availablePoints[SupportMoves] > 0) => 
-      addButton.tooltip = if(e.source == PBListsBox.moveView.learnButton) "learn" else "add"
+    case e: ButtonClicked if(/*e.source == PBListsBox.moveView.learnButton ||*/ e.source == PBListsBox.moveView.plusButton && palico.Cat.availablePoints[SupportMoves] > 0) => 
+//      addButton.tooltip = if(e.source == PBListsBox.moveView.learnButton) "learn" else "add"
       PBListsBox.moveView.listenTo(addButton)
-      populateList(palico.Cat.getAvailable[SupportMoves](e.source == PBListsBox.moveView.learnButton))
+      populateList(palico.Cat.getAvailable[SupportMoves](/*e.source == PBListsBox.moveView.learnButton*/))
       PBListsBox.moveView.deafTo(addButton)
-    case e: ButtonClicked if(e.source == PBListsBox.skillView.learnButton || e.source == PBListsBox.skillView.plusButton && palico.Cat.availablePoints[Skills] > 0) =>
-      addButton.tooltip = if(e.source == PBListsBox.skillView.learnButton) "learn" else "add"
+    case e: ButtonClicked if(/*e.source == PBListsBox.skillView.learnButton ||*/ e.source == PBListsBox.skillView.plusButton && palico.Cat.availablePoints[Skills] > 0) =>
+//      addButton.tooltip = if(e.source == PBListsBox.skillView.learnButton) "learn" else "add"
       PBListsBox.skillView.listenTo(addButton)
-      populateList(palico.Cat.getAvailable[Skills](e.source == PBListsBox.skillView.learnButton))
+      populateList(palico.Cat.getAvailable[Skills](/*e.source == PBListsBox.skillView.learnButton*/))
       PBListsBox.skillView.deafTo(addButton)
   }
   

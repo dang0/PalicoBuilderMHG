@@ -12,6 +12,6 @@ object Ref {
   final val VERSION_vSTR = "v" + VERSION_STR
   final val PROGRAM_NAME = "[MHG] Palico Builder"
   final val MAIN_TITLE = PROGRAM_NAME + " " + VERSION_vSTR
-  final val MAIN_SIZE = new Dimension(500,300)
+  final val MAIN_SIZE = new Dimension(600,450)
   final val USELESS_STR = "thanks for reading my code :)"
 }
